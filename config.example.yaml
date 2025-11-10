@@ -104,3 +104,42 @@ output:
 
   # Date format string
   date_format: '%Y-%m-%d %H:%M:%S'
+
+confluence:
+  # Confluence base URL
+  # Cloud: https://yourcompany.atlassian.net
+  # Server: http://confluence.company.com:8090
+  base_url: null
+
+  # Confluence username
+  # Cloud: your.email@company.com
+  # Server: your-username
+  username: null
+
+  # API token
+  # Cloud: Generate at https://id.atlassian.com/manage-profile/security/api-tokens
+  # Server: Your Confluence password
+  api_token: null
+
+  # Space key where wiki will be created
+  space_key: null
+
+  # Use Confluence Cloud API (true) or Server/Data Center API (false)
+  use_cloud: true
+
+  # Root page title for your wiki
+  root_page_title: "Slack Wiki"
+
+  # Optional: Parent page ID to nest wiki under existing page
+  # Find in page URL: /wiki/spaces/SPACE/pages/123456/Page+Title
+  parent_page_id: null
+
+  # Page organization structure
+  # Options: flat, hierarchical, by-category
+  structure: flat
+
+  # Add labels to pages for better organization
+  add_labels: true
+
+  # Dry run mode (preview without creating pages)
+  dry_run: false

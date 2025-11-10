@@ -64,12 +64,28 @@ class OutputConfig:
 
 
 @dataclass
+class ConfluenceConfig:
+    """Confluence integration configuration."""
+    base_url: Optional[str] = None
+    username: Optional[str] = None
+    api_token: Optional[str] = None
+    space_key: Optional[str] = None
+    use_cloud: bool = True
+    root_page_title: str = "Slack Wiki"
+    parent_page_id: Optional[str] = None
+    structure: str = "flat"  # flat, hierarchical, by-category
+    add_labels: bool = True
+    dry_run: bool = False
+
+
+@dataclass
 class Config:
     """Main application configuration."""
     slack: SlackConfig = field(default_factory=SlackConfig)
     ai: AIConfig = field(default_factory=AIConfig)
     processing: ProcessingConfig = field(default_factory=ProcessingConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
+    confluence: ConfluenceConfig = field(default_factory=ConfluenceConfig)
 
     @classmethod
     def from_file(cls, config_path: str) -> "Config":
@@ -85,7 +101,8 @@ class Config:
             slack=SlackConfig(**data.get('slack', {})),
             ai=AIConfig(**data.get('ai', {})),
             processing=ProcessingConfig(**data.get('processing', {})),
-            output=OutputConfig(**data.get('output', {}))
+            output=OutputConfig(**data.get('output', {})),
+            confluence=ConfluenceConfig(**data.get('confluence', {}))
         )
 
     def to_file(self, config_path: str) -> None:
@@ -97,7 +114,8 @@ class Config:
             'slack': asdict(self.slack),
             'ai': asdict(self.ai),
             'processing': asdict(self.processing),
-            'output': asdict(self.output)
+            'output': asdict(self.output),
+            'confluence': asdict(self.confluence)
         }
 
         with open(path, 'w') as f:
@@ -123,6 +141,16 @@ class Config:
             config.ai.aws_profile = os.getenv('AWS_PROFILE')
         if os.getenv('AI_MODEL'):
             config.ai.model_name = os.getenv('AI_MODEL')
+
+        # Confluence config from env
+        if os.getenv('CONFLUENCE_URL'):
+            config.confluence.base_url = os.getenv('CONFLUENCE_URL')
+        if os.getenv('CONFLUENCE_USERNAME'):
+            config.confluence.username = os.getenv('CONFLUENCE_USERNAME')
+        if os.getenv('CONFLUENCE_API_TOKEN'):
+            config.confluence.api_token = os.getenv('CONFLUENCE_API_TOKEN')
+        if os.getenv('CONFLUENCE_SPACE_KEY'):
+            config.confluence.space_key = os.getenv('CONFLUENCE_SPACE_KEY')
 
         return config
 

@@ -157,6 +157,45 @@ threadcrumb generate --exclude "private-channel,secret-stuff" --format json
 threadcrumb generate --no-ai --format markdown
 ```
 
+#### `threadcrumb export-confluence`
+Export wiki directly to Confluence.
+
+```bash
+threadcrumb export-confluence [OPTIONS]
+```
+
+**Options:**
+- `--channels TEXT` - Comma-separated list of channels (default: all)
+- `--exclude TEXT` - Comma-separated list of channels to exclude
+- `--no-ai` - Disable AI processing
+- `--no-cache` - Disable message caching
+- `--confluence-url TEXT` - Confluence base URL
+- `--username TEXT` - Confluence username
+- `--api-token TEXT` - Confluence API token
+- `--space-key TEXT` - Confluence space key
+- `--parent-page-id TEXT` - Parent page ID for wiki root
+- `--structure [flat|hierarchical|by-category]` - Page organization
+- `--dry-run` - Preview without creating pages
+
+**Examples:**
+
+```bash
+# Export to Confluence Cloud
+threadcrumb export-confluence \
+  --confluence-url https://mycompany.atlassian.net \
+  --username me@mycompany.com \
+  --api-token my-token \
+  --space-key TEAM
+
+# Export specific channels with dry run
+threadcrumb export-confluence --channels "general,dev" --dry-run
+
+# Export organized by category
+threadcrumb export-confluence --structure by-category
+```
+
+See [Confluence Export Guide](docs/CONFLUENCE_EXPORT.md) for detailed documentation.
+
 #### `threadcrumb list-channels`
 List all channels in workspace.
 
@@ -299,6 +338,27 @@ Structured data with indices:
 ### XML Export
 
 Similar structure to JSON, formatted as XML with proper hierarchy.
+
+### Confluence Export (API)
+
+Direct export to Confluence Cloud or Server:
+
+```bash
+threadcrumb export-confluence \
+  --confluence-url https://yourcompany.atlassian.net \
+  --username your.email@company.com \
+  --api-token your-api-token \
+  --space-key TEAM
+```
+
+Features:
+- Automatic page creation and updates
+- Native Confluence formatting
+- Interactive macros (TOC, expand, info panels)
+- Auto-labeling for organization
+- Multiple structure options (flat, hierarchical, by-category)
+
+See [Confluence Export Guide](docs/CONFLUENCE_EXPORT.md) for detailed setup.
 
 ## Advanced Usage
 

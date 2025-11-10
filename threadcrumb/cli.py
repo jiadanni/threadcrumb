@@ -14,6 +14,7 @@ from .slack import SlackAuthenticator, SlackClient, MessageFetcher, ThreadRecons
 from .ai import BedrockClient, AIProcessor
 from .processing import ContentPipeline
 from .output import MarkdownFormatter, HTMLFormatter, JSONFormatter, XMLFormatter
+from .confluence import export_to_confluence
 from .utils import setup_logging, ProgressTracker
 
 logger = logging.getLogger(__name__)
@@ -259,6 +260,206 @@ def generate(config: Config, channels: Optional[str], exclude: Optional[str], ou
 
     except Exception as e:
         logger.exception("Error generating wiki")
+        click.echo(click.style(f"✗ Error: {e}", fg='red'), err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option('--channels', help='Comma-separated list of channels to export (leave empty for all)')
+@click.option('--exclude', help='Comma-separated list of channels to exclude')
+@click.option('--no-ai', is_flag=True, help='Disable AI processing')
+@click.option('--no-cache', is_flag=True, help='Disable message caching')
+@click.option('--confluence-url', help='Confluence base URL (or set CONFLUENCE_URL env var)')
+@click.option('--username', help='Confluence username (or set CONFLUENCE_USERNAME env var)')
+@click.option('--api-token', help='Confluence API token (or set CONFLUENCE_API_TOKEN env var)')
+@click.option('--space-key', help='Confluence space key (or set CONFLUENCE_SPACE_KEY env var)')
+@click.option('--parent-page-id', help='Parent page ID for wiki root')
+@click.option('--structure', type=click.Choice(['flat', 'hierarchical', 'by-category']), default='flat', help='Page organization structure')
+@click.option('--dry-run', is_flag=True, help='Preview without creating pages')
+@click.pass_obj
+def export_confluence(
+    config: Config,
+    channels: Optional[str],
+    exclude: Optional[str],
+    no_ai: bool,
+    no_cache: bool,
+    confluence_url: Optional[str],
+    username: Optional[str],
+    api_token: Optional[str],
+    space_key: Optional[str],
+    parent_page_id: Optional[str],
+    structure: str,
+    dry_run: bool
+):
+    """Export wiki directly to Confluence."""
+    try:
+        # Check Slack token
+        if not config.slack.access_token:
+            click.echo(click.style("✗ No Slack access token found. Run 'threadcrumb auth' first.", fg='red'), err=True)
+            sys.exit(1)
+
+        # Get Confluence credentials (command line overrides config/env)
+        confluence_url = confluence_url or config.confluence.base_url
+        username = username or config.confluence.username
+        api_token = api_token or config.confluence.api_token
+        space_key = space_key or config.confluence.space_key
+
+        if not all([confluence_url, username, api_token, space_key]):
+            click.echo(click.style("✗ Missing Confluence credentials. Provide via options or config file.", fg='red'), err=True)
+            click.echo("\nRequired:")
+            click.echo("  --confluence-url or CONFLUENCE_URL")
+            click.echo("  --username or CONFLUENCE_USERNAME")
+            click.echo("  --api-token or CONFLUENCE_API_TOKEN")
+            click.echo("  --space-key or CONFLUENCE_SPACE_KEY")
+            sys.exit(1)
+
+        # Initialize Slack client
+        click.echo("Connecting to Slack...")
+        slack_client = SlackClient(
+            token=config.slack.access_token,
+            rate_limit_delay=config.slack.rate_limit_delay,
+            max_retries=config.slack.max_retries
+        )
+
+        workspace_info = slack_client.get_workspace_info()
+        click.echo(f"Connected to workspace: {workspace_info['name']}")
+
+        # Fetch and process channels (same as generate command)
+        click.echo("Fetching channels...")
+        all_channels = slack_client.list_channels()
+
+        channel_names = [ch.strip() for ch in channels.split(',')] if channels else None
+        exclude_names = [ch.strip() for ch in exclude.split(',')] if exclude else []
+
+        if channel_names:
+            selected_channels = [
+                ch for ch in all_channels
+                if ch['name'] in channel_names and ch['name'] not in exclude_names
+            ]
+        else:
+            selected_channels = [
+                ch for ch in all_channels
+                if ch['name'] not in exclude_names
+            ]
+
+        if not selected_channels:
+            click.echo(click.style("✗ No channels selected", fg='red'), err=True)
+            sys.exit(1)
+
+        click.echo(f"Processing {len(selected_channels)} channels...")
+
+        # Initialize AI if enabled
+        ai_processor = None
+        if not no_ai:
+            try:
+                click.echo("Initializing AI processor...")
+                bedrock_client = BedrockClient(
+                    region=config.ai.region,
+                    model_name=config.ai.model_name,
+                    max_tokens=config.ai.max_tokens,
+                    temperature=config.ai.temperature,
+                    aws_profile=config.ai.aws_profile
+                )
+
+                if bedrock_client.test_connection():
+                    ai_processor = AIProcessor(
+                        bedrock_client=bedrock_client,
+                        fallback_enabled=config.ai.fallback_enabled
+                    )
+                    click.echo(click.style("✓ AI processor initialized", fg='green'))
+                else:
+                    click.echo(click.style("! AI connection failed, continuing without AI", fg='yellow'))
+            except Exception as e:
+                click.echo(click.style(f"! AI initialization failed: {e}", fg='yellow'))
+
+        # Process channels
+        message_fetcher = MessageFetcher(
+            client=slack_client,
+            cache_enabled=not no_cache,
+            cache_dir=Path(config.slack.cache_dir)
+        )
+
+        thread_reconstructor = ThreadReconstructor(
+            max_depth=config.processing.max_thread_depth
+        )
+
+        pipeline = ContentPipeline(
+            ai_processor=ai_processor,
+            min_message_length=config.processing.min_message_length,
+            min_thread_messages=2
+        )
+
+        processed_channels = []
+
+        with ProgressTracker(len(selected_channels), "Processing channels") as progress:
+            for channel in selected_channels:
+                progress.set_description(f"Processing #{channel['name']}")
+
+                try:
+                    messages = message_fetcher.fetch_channel_messages(
+                        channel['id'],
+                        use_cache=not no_cache
+                    )
+
+                    threads = thread_reconstructor.reconstruct_threads(
+                        messages,
+                        fetch_replies=config.processing.thread_reconstruction,
+                        message_fetcher=message_fetcher
+                    )
+
+                    processed_channel = pipeline.process_channel(
+                        threads=threads,
+                        channel_info=channel,
+                        use_ai=not no_ai and ai_processor is not None
+                    )
+
+                    processed_channels.append(processed_channel)
+
+                except Exception as e:
+                    logger.error(f"Error processing channel {channel['name']}: {e}")
+                    click.echo(click.style(f"! Error processing #{channel['name']}: {e}", fg='yellow'))
+
+                progress.update(1)
+
+        if not processed_channels:
+            click.echo(click.style("✗ No channels processed successfully", fg='red'), err=True)
+            sys.exit(1)
+
+        # Export to Confluence
+        click.echo(f"\n{'[DRY RUN] ' if dry_run else ''}Exporting to Confluence...")
+        click.echo(f"Space: {space_key}")
+        click.echo(f"Structure: {structure}")
+
+        page_map = export_to_confluence(
+            channels=processed_channels,
+            confluence_url=confluence_url,
+            username=username,
+            api_token=api_token,
+            space_key=space_key,
+            root_page_title=config.confluence.root_page_title,
+            parent_page_id=parent_page_id or config.confluence.parent_page_id,
+            structure=structure,
+            dry_run=dry_run,
+            use_cloud=config.confluence.use_cloud
+        )
+
+        if dry_run:
+            click.echo(click.style(f"\n✓ Dry run completed!", fg='green'))
+            click.echo(f"Would create {len(page_map)} pages in Confluence")
+        else:
+            click.echo(click.style(f"\n✓ Successfully exported to Confluence!", fg='green'))
+            click.echo(f"Created {len(page_map)} pages in space {space_key}")
+            click.echo(f"\nView your wiki: {confluence_url}/wiki/spaces/{space_key}")
+
+        # Print statistics
+        total_threads = sum(len(ch.threads) for ch in processed_channels)
+        click.echo(f"\nStatistics:")
+        click.echo(f"  Channels: {len(processed_channels)}")
+        click.echo(f"  Threads: {total_threads}")
+        click.echo(f"  Pages Created: {len(page_map)}")
+
+    except Exception as e:
+        logger.exception("Error exporting to Confluence")
         click.echo(click.style(f"✗ Error: {e}", fg='red'), err=True)
         sys.exit(1)
 
