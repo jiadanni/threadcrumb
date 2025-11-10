@@ -1,0 +1,455 @@
+# ThreadCrumb
+
+AI-powered Slack workspace analyzer and wiki generator. ThreadCrumb connects to your Slack workspaces, analyzes channel history, and generates structured, interlinked wikis or FAQs using AWS Bedrock AI for intelligent content organization.
+
+## Features
+
+### 🔐 Slack Integration
+- **OAuth 2.0 Authentication** with configurable scopes
+- **Multi-channel support** with selective inclusion/exclusion
+- **Incremental sync** with timestamp-based updates
+- **Rate limit handling** with exponential backoff
+- **File attachment processing** with local caching
+
+### 🤖 AI Integration (AWS Bedrock)
+- **Model flexibility** - configurable AI model selection (Claude 3 Sonnet, Haiku, Opus)
+- **Content categorization** with custom taxonomies
+- **Topic extraction** and clustering
+- **Summary generation** for threads and channels
+- **Q&A pair generation** from discussions
+- **Sentiment/importance scoring** for content prioritization
+- **Fallback mode** when AI services are unavailable
+
+### 📊 Content Processing Pipeline
+```
+Raw Messages → Thread Reconstruction → AI Analysis → Structured Content → Interlinked Wiki
+```
+
+### 📝 Output Formats
+- **Markdown wiki** with hierarchical navigation
+- **Static HTML site** with search functionality
+- **JSON/XML** structured data for external processing
+- **Plain text export** with basic formatting
+
+## Installation
+
+### Prerequisites
+
+- Python 3.9 or higher
+- AWS account with Bedrock access (for AI features)
+- Slack workspace with admin privileges
+
+### Install from source
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/threadcrumb.git
+cd threadcrumb
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install package
+pip install -e .
+```
+
+### Install dependencies only
+
+```bash
+pip install -r requirements.txt
+```
+
+## Quick Start
+
+### 1. Configure AWS Credentials
+
+Set up AWS credentials for Bedrock access:
+
+```bash
+# Using AWS CLI
+aws configure
+
+# Or set environment variables
+export AWS_REGION=us-east-1
+export AWS_PROFILE=your-profile
+```
+
+### 2. Create Slack App
+
+1. Go to [Slack API](https://api.slack.com/apps)
+2. Create a new app "From scratch"
+3. Add OAuth scopes under **OAuth & Permissions**:
+   - `channels:history`
+   - `channels:read`
+   - `groups:history`
+   - `groups:read`
+   - `users:read`
+   - `team:read`
+   - `files:read`
+4. Note your **Client ID** and **Client Secret**
+
+### 3. Authenticate with Slack
+
+```bash
+threadcrumb auth
+```
+
+Follow the prompts to enter your Slack app credentials. A browser window will open for OAuth authorization.
+
+### 4. Generate Wiki
+
+```bash
+# Generate Markdown wiki from all channels
+threadcrumb generate
+
+# Generate HTML wiki from specific channels
+threadcrumb generate --channels "general,dev-team" --format html
+
+# Generate without AI (faster, basic export)
+threadcrumb generate --no-ai --format markdown
+```
+
+## Usage
+
+### Commands
+
+#### `threadcrumb auth`
+Authenticate with your Slack workspace.
+
+```bash
+threadcrumb auth [OPTIONS]
+```
+
+**Options:**
+- `--client-id TEXT` - Slack app client ID
+- `--client-secret TEXT` - Slack app client secret
+- `--port INTEGER` - OAuth callback port (default: 8000)
+
+#### `threadcrumb generate`
+Generate wiki from Slack workspace.
+
+```bash
+threadcrumb generate [OPTIONS]
+```
+
+**Options:**
+- `--channels TEXT` - Comma-separated list of channels (default: all)
+- `--exclude TEXT` - Comma-separated list of channels to exclude
+- `--output PATH` - Output directory (default: ./output)
+- `--format [markdown|html|json|xml]` - Output format (default: markdown)
+- `--no-ai` - Disable AI processing (faster)
+- `--no-cache` - Disable message caching
+
+**Examples:**
+
+```bash
+# Generate Markdown wiki from all channels
+threadcrumb generate
+
+# Generate HTML wiki from specific channels
+threadcrumb generate --channels "general,engineering" --format html --output ./wiki
+
+# Generate JSON export excluding private channels
+threadcrumb generate --exclude "private-channel,secret-stuff" --format json
+
+# Quick export without AI processing
+threadcrumb generate --no-ai --format markdown
+```
+
+#### `threadcrumb list-channels`
+List all channels in workspace.
+
+```bash
+threadcrumb list-channels
+```
+
+#### `threadcrumb config-init`
+Initialize configuration file.
+
+```bash
+threadcrumb config-init
+```
+
+### Configuration
+
+ThreadCrumb uses a YAML configuration file located at `~/.threadcrumb/config.yaml`.
+
+Initialize with default settings:
+
+```bash
+threadcrumb config-init
+```
+
+**Example configuration:**
+
+```yaml
+slack:
+  access_token: null
+  workspace_id: null
+  channels: []
+  exclude_channels: []
+  rate_limit_delay: 1.0
+  max_retries: 3
+  cache_enabled: true
+  cache_dir: .threadcrumb/cache
+
+ai:
+  provider: bedrock
+  model_name: anthropic.claude-3-sonnet-20240229-v1:0
+  region: us-east-1
+  max_tokens: 4096
+  temperature: 0.7
+  fallback_enabled: true
+  aws_profile: null
+
+processing:
+  thread_reconstruction: true
+  include_attachments: true
+  min_message_length: 10
+  max_thread_depth: 50
+  categorization_enabled: true
+  topic_extraction_enabled: true
+  summary_enabled: true
+  qa_generation_enabled: true
+  sentiment_analysis: false
+  importance_scoring: true
+
+output:
+  format: markdown
+  output_dir: output
+  create_index: true
+  interlink_pages: true
+  include_search: true
+  include_toc: true
+  date_format: '%Y-%m-%d %H:%M:%S'
+```
+
+### Environment Variables
+
+You can override configuration with environment variables:
+
+```bash
+# Slack configuration
+export SLACK_CLIENT_ID=your-client-id
+export SLACK_CLIENT_SECRET=your-client-secret
+export SLACK_ACCESS_TOKEN=your-access-token
+
+# AWS configuration
+export AWS_REGION=us-east-1
+export AWS_PROFILE=your-profile
+export AI_MODEL=anthropic.claude-3-haiku-20240307-v1:0
+```
+
+## Output Formats
+
+### Markdown Wiki
+
+Organized directory structure with interlinked pages:
+
+```
+output/
+├── README.md              # Main index
+├── categories.md          # Category index
+├── topics.md             # Topic index
+├── faq.md                # Generated FAQ
+├── general/              # Channel directory
+│   ├── README.md         # Channel overview
+│   └── thread-*.md       # Individual threads
+└── engineering/
+    ├── README.md
+    └── thread-*.md
+```
+
+### HTML Static Site
+
+Self-contained website with search:
+
+```
+output/
+├── index.html            # Home page
+├── channels.html         # Channel list
+├── categories.html       # Category index
+├── topics.html          # Topic index
+├── faq.html             # FAQ page
+├── channel_*.html       # Channel pages
+└── thread_*.html        # Thread pages
+```
+
+### JSON Export
+
+Structured data with indices:
+
+```json
+{
+  "metadata": {
+    "channel_count": 5,
+    "total_threads": 123,
+    "export_version": "1.0"
+  },
+  "channels": [...],
+  "indices": {
+    "categories": {...},
+    "topics": {...},
+    "qa_pairs": [...]
+  }
+}
+```
+
+### XML Export
+
+Similar structure to JSON, formatted as XML with proper hierarchy.
+
+## Advanced Usage
+
+### Customizing AI Models
+
+Edit your config file to use different Bedrock models:
+
+```yaml
+ai:
+  model_name: anthropic.claude-3-haiku-20240307-v1:0  # Faster, cheaper
+  # or
+  model_name: anthropic.claude-3-opus-20240229-v1:0   # More powerful
+```
+
+### Selective Channel Processing
+
+```bash
+# Process only specific channels
+threadcrumb generate --channels "general,announcements,dev-team"
+
+# Process all except specific channels
+threadcrumb generate --exclude "spam,test-channel"
+```
+
+### Incremental Updates
+
+ThreadCrumb caches messages locally. Re-running will use cached data:
+
+```bash
+# Use cached messages (faster)
+threadcrumb generate
+
+# Force fresh fetch
+threadcrumb generate --no-cache
+```
+
+### Batch Processing
+
+For large workspaces, process channels in batches:
+
+```bash
+# Batch 1
+threadcrumb generate --channels "chan1,chan2,chan3" --output ./batch1
+
+# Batch 2
+threadcrumb generate --channels "chan4,chan5,chan6" --output ./batch2
+```
+
+## Troubleshooting
+
+### AWS Bedrock Access
+
+If you get authentication errors:
+
+```bash
+# Verify AWS credentials
+aws sts get-caller-identity
+
+# Check Bedrock model access
+aws bedrock list-foundation-models --region us-east-1
+```
+
+### Slack Rate Limits
+
+If you hit rate limits:
+
+1. Increase `rate_limit_delay` in config
+2. Process fewer channels at once
+3. Use cached data when possible
+
+### Missing Dependencies
+
+```bash
+# Reinstall all dependencies
+pip install -e ".[dev]"
+```
+
+## Development
+
+### Running Tests
+
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=threadcrumb
+```
+
+### Code Formatting
+
+```bash
+# Format code
+black threadcrumb/
+
+# Lint
+flake8 threadcrumb/
+
+# Type checking
+mypy threadcrumb/
+```
+
+## Architecture
+
+```
+threadcrumb/
+├── slack/           # Slack API integration
+│   ├── auth.py      # OAuth authentication
+│   ├── client.py    # API client with rate limiting
+│   └── messages.py  # Message fetching & thread reconstruction
+├── ai/              # AI integration
+│   ├── bedrock.py   # AWS Bedrock client
+│   └── processor.py # Content analysis & processing
+├── processing/      # Content processing pipeline
+│   └── pipeline.py  # Main processing logic
+├── output/          # Output formatters
+│   ├── markdown.py  # Markdown formatter
+│   ├── html.py      # HTML formatter
+│   └── structured.py # JSON/XML formatters
+├── utils/           # Utilities
+│   ├── logging.py   # Logging setup
+│   └── progress.py  # Progress tracking
+├── config.py        # Configuration management
+└── cli.py           # Command-line interface
+```
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details
+
+## Acknowledgments
+
+- Built with [Slack SDK](https://slack.dev/python-slack-sdk/)
+- AI powered by [AWS Bedrock](https://aws.amazon.com/bedrock/)
+- CLI built with [Click](https://click.palletsprojects.com/)
+
+## Support
+
+For issues and questions:
+- GitHub Issues: [Report a bug](https://github.com/yourusername/threadcrumb/issues)
+- Documentation: [Read the docs](https://github.com/yourusername/threadcrumb/wiki)
