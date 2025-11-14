@@ -44,6 +44,24 @@ dev = [
     "flake8>=6.1.0",
     "mypy>=1.5.0",
 ]
+search = [
+    "whoosh>=2.7.4",
+]
+ai-openai = [
+    "openai>=1.0.0",
+]
+ai-anthropic = [
+    "anthropic>=0.18.0",
+]
+interactive = [
+    "rich>=13.0.0",
+]
+all = [
+    "whoosh>=2.7.4",
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
+    "rich>=13.0.0",
+]
 
 [project.scripts]
 threadcrumb = "threadcrumb.cli:main"

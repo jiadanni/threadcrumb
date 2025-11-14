@@ -49,7 +49,8 @@ class ConfluenceFormatter:
     def format_channels(
         self,
         channels: List[ProcessedChannel],
-        parent_page_id: Optional[str] = None
+        parent_page_id: Optional[str] = None,
+        slack_token: Optional[str] = None
     ) -> Dict[str, str]:
         """
         Format and upload all channels to Confluence.
@@ -152,9 +153,10 @@ class ConfluenceFormatter:
 
         logger.info(f"Created channel page: {channel_page_title}")
 
-        # Create thread pages
+        # Create thread pages (pass slack_token to parent method)
         for thread in channel.threads:
-            self._create_thread_page(thread, channel_page_id)
+            slack_token = getattr(self, '_slack_token', None)
+            self._create_thread_page(thread, channel_page_id, slack_token)
 
     def _build_channel_overview(self, channel: ProcessedChannel) -> str:
         """Build channel overview page content."""
@@ -181,7 +183,8 @@ Threads: {len(channel.threads)}
     def _create_thread_page(
         self,
         thread: ProcessedThread,
-        parent_id: str
+        parent_id: str,
+        slack_token: Optional[str] = None
     ) -> None:
         """Create page for a thread."""
         # Sanitize title for Confluence (max 255 chars)
@@ -210,8 +213,69 @@ Threads: {len(channel.threads)}
             labels=labels if labels else None
         )
 
-        self.page_map[title] = page['id']
+        page_id = page['id']
+        self.page_map[title] = page_id
         logger.debug(f"Created thread page: {title}")
+
+        # Upload attachments if available
+        if slack_token:
+            self._upload_attachments(thread, page_id, slack_token)
+
+    def _upload_attachments(
+        self,
+        thread: ProcessedThread,
+        page_id: str,
+        slack_token: str
+    ) -> None:
+        """
+        Upload Slack attachments to Confluence page.
+
+        Args:
+            thread: Processed thread
+            page_id: Confluence page ID
+            slack_token: Slack access token
+        """
+        import tempfile
+        import requests
+
+        for msg in thread.messages:
+            files = msg.get('files', [])
+            for file_info in files:
+                try:
+                    # Download from Slack
+                    file_url = file_info.get('url_private_download') or file_info.get('url_private')
+                    if not file_url:
+                        continue
+
+                    file_name = file_info.get('name', 'attachment')
+
+                    logger.debug(f"Downloading attachment: {file_name}")
+
+                    headers = {"Authorization": f"Bearer {slack_token}"}
+                    response = requests.get(file_url, headers=headers)
+                    response.raise_for_status()
+
+                    # Save temporarily
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file_name}") as tmp:
+                        tmp.write(response.content)
+                        tmp_path = tmp.name
+
+                    # Upload to Confluence
+                    logger.debug(f"Uploading to Confluence: {file_name}")
+                    self.client.add_attachment(
+                        page_id=page_id,
+                        file_path=tmp_path,
+                        comment=f"From Slack message"
+                    )
+
+                    # Clean up
+                    import os
+                    os.unlink(tmp_path)
+
+                    logger.info(f"Uploaded attachment: {file_name}")
+
+                except Exception as e:
+                    logger.warning(f"Failed to upload attachment {file_name}: {e}")
 
     def _create_category_index(
         self,
