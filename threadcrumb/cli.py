@@ -11,18 +11,10 @@ import logging
 
 from . import __version__
 from .config import Config, load_config, get_default_config_path
-from .slack import SlackAuthenticator, SlackClient, MessageFetcher, ThreadReconstructor
-from .ai import BedrockClient, AIProcessor
-from .ai.providers import get_ai_provider
-from .processing import ContentPipeline
-from .output import MarkdownFormatter, HTMLFormatter, JSONFormatter, XMLFormatter
+from .slack import SlackAuthenticator, SlackClient
 from .confluence import export_to_confluence
-from .utils import setup_logging, ProgressTracker
-from .utils.parallel import ParallelProcessor, ChannelProcessor
-from .search import SearchIndex
-from .cache.sqlite_cache import SQLiteCache
-from .resumption import CheckpointManager, ExportState
-from .security import PIIDetector, ContentRedactor, DataEncryptor, AuditLogger, AuditEventType
+from .utils import setup_logging
+from .cli_commands import execute_generate_command
 
 logger = logging.getLogger(__name__)
 
@@ -104,182 +96,24 @@ def generate(config: Config, channels: Optional[str], exclude: Optional[str], ou
              parallel: bool, max_workers: int, interactive: bool, build_index: bool, ai_provider: str, use_sqlite_cache: bool,
              resume: bool, redact_pii: bool, encrypt_cache: bool):
     """Generate wiki from Slack workspace."""
-    try:
-        # Check for access token
-        if not config.slack.access_token:
-            click.echo(click.style("✗ No Slack access token found. Run 'threadcrumb auth' first.", fg='red'), err=True)
-            sys.exit(1)
-
-        # Initialize Slack client
-        click.echo("Connecting to Slack...")
-        slack_client = SlackClient(
-            token=config.slack.access_token,
-            rate_limit_delay=config.slack.rate_limit_delay,
-            max_retries=config.slack.max_retries
-        )
-
-        # Get workspace info
-        workspace_info = slack_client.get_workspace_info()
-        click.echo(f"Connected to workspace: {workspace_info['name']}")
-
-        # List channels
-        click.echo("Fetching channels...")
-        all_channels = slack_client.list_channels()
-
-        # Filter channels
-        channel_names = [ch.strip() for ch in channels.split(',')] if channels else None
-        exclude_names = [ch.strip() for ch in exclude.split(',')] if exclude else []
-
-        if channel_names:
-            selected_channels = [
-                ch for ch in all_channels
-                if ch['name'] in channel_names and ch['name'] not in exclude_names
-            ]
-        else:
-            selected_channels = [
-                ch for ch in all_channels
-                if ch['name'] not in exclude_names
-            ]
-
-        if not selected_channels:
-            click.echo(click.style("✗ No channels selected", fg='red'), err=True)
-            sys.exit(1)
-
-        click.echo(f"Processing {len(selected_channels)} channels")
-
-        # Initialize AI if enabled
-        ai_processor = None
-        if not no_ai:
-            try:
-                click.echo("Initializing AI processor...")
-                bedrock_client = BedrockClient(
-                    region=config.ai.region,
-                    model_name=config.ai.model_name,
-                    max_tokens=config.ai.max_tokens,
-                    temperature=config.ai.temperature,
-                    aws_profile=config.ai.aws_profile
-                )
-
-                if bedrock_client.test_connection():
-                    ai_processor = AIProcessor(
-                        bedrock_client=bedrock_client,
-                        fallback_enabled=config.ai.fallback_enabled
-                    )
-                    click.echo(click.style("✓ AI processor initialized", fg='green'))
-                else:
-                    click.echo(click.style("! AI connection failed, continuing without AI", fg='yellow'))
-
-            except Exception as e:
-                click.echo(click.style(f"! AI initialization failed: {e}", fg='yellow'))
-                if not config.ai.fallback_enabled:
-                    raise
-
-        # Initialize message fetcher
-        message_fetcher = MessageFetcher(
-            client=slack_client,
-            cache_enabled=not no_cache,
-            cache_dir=Path(config.slack.cache_dir)
-        )
-
-        # Initialize thread reconstructor
-        thread_reconstructor = ThreadReconstructor(
-            max_depth=config.processing.max_thread_depth
-        )
-
-        # Initialize content pipeline
-        pipeline = ContentPipeline(
-            ai_processor=ai_processor,
-            min_message_length=config.processing.min_message_length,
-            min_thread_messages=2
-        )
-
-        # Process each channel
-        processed_channels = []
-
-        with ProgressTracker(len(selected_channels), "Processing channels") as progress:
-            for channel in selected_channels:
-                progress.set_description(f"Processing #{channel['name']}")
-
-                try:
-                    # Fetch messages
-                    messages = message_fetcher.fetch_channel_messages(
-                        channel['id'],
-                        use_cache=not no_cache
-                    )
-
-                    # Reconstruct threads
-                    threads = thread_reconstructor.reconstruct_threads(
-                        messages,
-                        fetch_replies=config.processing.thread_reconstruction,
-                        message_fetcher=message_fetcher
-                    )
-
-                    # Process with AI
-                    processed_channel = pipeline.process_channel(
-                        threads=threads,
-                        channel_info=channel,
-                        use_ai=not no_ai and ai_processor is not None
-                    )
-
-                    processed_channels.append(processed_channel)
-
-                except Exception as e:
-                    logger.error(f"Error processing channel {channel['name']}: {e}")
-                    click.echo(click.style(f"! Error processing #{channel['name']}: {e}", fg='yellow'))
-
-                progress.update(1)
-
-        if not processed_channels:
-            click.echo(click.style("✗ No channels processed successfully", fg='red'), err=True)
-            sys.exit(1)
-
-        # Generate output
-        output_dir = Path(output)
-        click.echo(f"\nGenerating {format} output...")
-
-        if format == 'markdown':
-            formatter = MarkdownFormatter(
-                output_dir=output_dir,
-                create_index=config.output.create_index,
-                interlink_pages=config.output.interlink_pages,
-                include_toc=config.output.include_toc
-            )
-            formatter.format_channels(processed_channels)
-
-        elif format == 'html':
-            formatter = HTMLFormatter(
-                output_dir=output_dir,
-                include_search=config.output.include_search
-            )
-            formatter.format_channels(processed_channels)
-
-        elif format == 'json':
-            formatter = JSONFormatter(
-                output_path=output_dir / "slack_wiki.json",
-                pretty=True
-            )
-            formatter.format_channels(processed_channels)
-
-        elif format == 'xml':
-            formatter = XMLFormatter(
-                output_path=output_dir / "slack_wiki.xml",
-                pretty=True
-            )
-            formatter.format_channels(processed_channels)
-
-        click.echo(click.style(f"\n✓ Wiki generated successfully!", fg='green'))
-        click.echo(f"Output location: {output_dir}")
-
-        # Print statistics
-        total_threads = sum(len(ch.threads) for ch in processed_channels)
-        click.echo(f"\nStatistics:")
-        click.echo(f"  Channels: {len(processed_channels)}")
-        click.echo(f"  Threads: {total_threads}")
-
-    except Exception as e:
-        logger.exception("Error generating wiki")
-        click.echo(click.style(f"✗ Error: {e}", fg='red'), err=True)
-        sys.exit(1)
+    execute_generate_command(
+        config=config,
+        channels=channels,
+        exclude=exclude,
+        output=output,
+        format=format,
+        no_ai=no_ai,
+        no_cache=no_cache,
+        parallel=parallel,
+        max_workers=max_workers,
+        interactive=interactive,
+        build_index=build_index,
+        ai_provider=ai_provider,
+        use_sqlite_cache=use_sqlite_cache,
+        resume=resume,
+        redact_pii=redact_pii,
+        encrypt_cache=encrypt_cache
+    )
 
 
 @cli.command()

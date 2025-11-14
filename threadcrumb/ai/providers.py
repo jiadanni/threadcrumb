@@ -192,3 +192,69 @@ def create_ai_provider(
         return BedrockClient(**kwargs)
     else:
         raise ValueError(f"Unknown provider: {provider}")
+
+
+def get_ai_provider(provider_name: str, config):
+    """
+    Get AI provider from config.
+
+    Args:
+        provider_name: Provider name (bedrock, openai, anthropic)
+        config: Configuration object
+
+    Returns:
+        AI provider instance or None
+    """
+    import os
+
+    try:
+        if provider_name == "bedrock":
+            from .bedrock import BedrockClient
+            return BedrockClient(
+                region=config.ai.region,
+                model_name=config.ai.model_name,
+                max_tokens=config.ai.max_tokens,
+                temperature=config.ai.temperature,
+                aws_profile=config.ai.aws_profile
+            )
+
+        elif provider_name == "openai":
+            # Get API key from config or environment
+            api_key = getattr(config.ai, 'openai_api_key', None) or os.getenv('OPENAI_API_KEY')
+            if not api_key:
+                logger.error("OpenAI API key not found in config or OPENAI_API_KEY environment variable")
+                return None
+
+            model = getattr(config.ai, 'openai_model', 'gpt-4-turbo-preview')
+
+            return OpenAIProvider(
+                api_key=api_key,
+                model=model,
+                max_tokens=config.ai.max_tokens,
+                temperature=config.ai.temperature
+            )
+
+        elif provider_name == "anthropic":
+            # Get API key from config or environment
+            api_key = getattr(config.ai, 'anthropic_api_key', None) or os.getenv('ANTHROPIC_API_KEY')
+            if not api_key:
+                logger.error("Anthropic API key not found in config or ANTHROPIC_API_KEY environment variable")
+                return None
+
+            model = getattr(config.ai, 'anthropic_model', 'claude-3-sonnet-20240229')
+
+            return AnthropicProvider(
+                api_key=api_key,
+                model=model,
+                max_tokens=config.ai.max_tokens,
+                temperature=config.ai.temperature
+            )
+
+        else:
+            logger.error(f"Unknown AI provider: {provider_name}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Failed to initialize {provider_name} provider: {e}")
+        return None
+
