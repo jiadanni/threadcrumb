@@ -4,6 +4,7 @@ Command-line interface for ThreadCrumb.
 
 import sys
 import click
+import uuid
 from pathlib import Path
 from typing import Optional
 import logging
@@ -12,10 +13,16 @@ from . import __version__
 from .config import Config, load_config, get_default_config_path
 from .slack import SlackAuthenticator, SlackClient, MessageFetcher, ThreadReconstructor
 from .ai import BedrockClient, AIProcessor
+from .ai.providers import get_ai_provider
 from .processing import ContentPipeline
 from .output import MarkdownFormatter, HTMLFormatter, JSONFormatter, XMLFormatter
 from .confluence import export_to_confluence
 from .utils import setup_logging, ProgressTracker
+from .utils.parallel import ParallelProcessor, ChannelProcessor
+from .search import SearchIndex
+from .cache.sqlite_cache import SQLiteCache
+from .resumption import CheckpointManager, ExportState
+from .security import PIIDetector, ContentRedactor, DataEncryptor, AuditLogger, AuditEventType
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +90,19 @@ def auth(config: Config, client_id: str, client_secret: str, port: int):
 @click.option('--format', type=click.Choice(['markdown', 'html', 'json', 'xml']), default='markdown', help='Output format')
 @click.option('--no-ai', is_flag=True, help='Disable AI processing (faster, basic export only)')
 @click.option('--no-cache', is_flag=True, help='Disable message caching')
+@click.option('--parallel', is_flag=True, help='Process channels in parallel for better performance')
+@click.option('--max-workers', type=int, default=4, help='Max parallel workers (default: 4)')
+@click.option('--interactive', '-i', is_flag=True, help='Interactive mode with guided prompts')
+@click.option('--build-index', is_flag=True, help='Build search index after generation')
+@click.option('--ai-provider', type=click.Choice(['bedrock', 'openai', 'anthropic']), default='bedrock', help='AI provider to use')
+@click.option('--use-sqlite-cache', is_flag=True, help='Use SQLite cache instead of file cache')
+@click.option('--resume', is_flag=True, help='Resume previous interrupted export')
+@click.option('--redact-pii', is_flag=True, help='Detect and redact PII from exports')
+@click.option('--encrypt-cache', is_flag=True, help='Encrypt cached data at rest')
 @click.pass_obj
-def generate(config: Config, channels: Optional[str], exclude: Optional[str], output: str, format: str, no_ai: bool, no_cache: bool):
+def generate(config: Config, channels: Optional[str], exclude: Optional[str], output: str, format: str, no_ai: bool, no_cache: bool,
+             parallel: bool, max_workers: int, interactive: bool, build_index: bool, ai_provider: str, use_sqlite_cache: bool,
+             resume: bool, redact_pii: bool, encrypt_cache: bool):
     """Generate wiki from Slack workspace."""
     try:
         # Check for access token
@@ -501,6 +519,50 @@ def list_channels(config: Config):
             click.echo(f"{status} #{channel['name']} ({members} members)")
 
     except Exception as e:
+        click.echo(click.style(f"✗ Error: {e}", fg='red'), err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument('query')
+@click.option('--index-path', type=click.Path(exists=True), default='output/search_index.json', help='Path to search index')
+@click.option('--limit', type=int, default=10, help='Maximum results to return')
+@click.pass_obj
+def search(config: Config, query: str, index_path: str, limit: int):
+    """Search the generated wiki content."""
+    try:
+        index_file = Path(index_path)
+
+        if not index_file.exists():
+            click.echo(click.style(f"✗ Search index not found: {index_path}", fg='red'), err=True)
+            click.echo("\nGenerate an index with: threadcrumb generate --build-index")
+            sys.exit(1)
+
+        # Load search index
+        search_index = SearchIndex()
+        search_index.load(index_file)
+
+        # Perform search
+        click.echo(f"Searching for: '{query}'\n")
+        results = search_index.search(query, max_results=limit)
+
+        if not results:
+            click.echo("No results found.")
+            return
+
+        click.echo(f"Found {len(results)} results:\n")
+
+        for i, result in enumerate(results, 1):
+            click.echo(f"{i}. {result.thread_title}")
+            click.echo(f"   Score: {result.score:.2f}")
+            if result.excerpt:
+                click.echo(f"   {result.excerpt}")
+            if result.url:
+                click.echo(f"   URL: {result.url}")
+            click.echo()
+
+    except Exception as e:
+        logger.exception("Error searching")
         click.echo(click.style(f"✗ Error: {e}", fg='red'), err=True)
         sys.exit(1)
 

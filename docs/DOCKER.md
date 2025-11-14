@@ -28,6 +28,17 @@ docker run --rm \
   -e AWS_SECRET_ACCESS_KEY=your-secret \
   -v $(pwd)/output:/app/output \
   threadcrumb:latest generate --format html
+
+# Generate with parallel processing and search indexing
+docker run --rm \
+  -e SLACK_ACCESS_TOKEN=your-token \
+  -v $(pwd)/output:/app/output \
+  threadcrumb:latest generate --parallel --build-index
+
+# Search the generated wiki
+docker run --rm \
+  -v $(pwd)/output:/app/output \
+  threadcrumb:latest search "authentication" --index-path /app/output/search_index.json
 ```
 
 ## Using Docker Compose
@@ -118,6 +129,73 @@ confluence:
 ```
 
 ## Advanced Usage
+
+### Build with Optional Features
+
+Build Docker images with specific feature sets:
+
+```bash
+# Build with all features
+docker build --build-arg INSTALL_EXTRAS="all" -t threadcrumb:full .
+
+# Build with specific features
+docker build --build-arg INSTALL_EXTRAS="search,security" -t threadcrumb:secure .
+
+# Build with AI provider support
+docker build --build-arg INSTALL_EXTRAS="ai-openai,ai-anthropic" -t threadcrumb:multi-ai .
+```
+
+Available extras:
+- `search` - Whoosh search functionality
+- `ai-openai` - OpenAI provider support
+- `ai-anthropic` - Anthropic provider support
+- `interactive` - Rich TUI for interactive mode
+- `security` - Encryption and PII detection
+- `all` - All optional features
+
+### Use Different AI Providers
+
+```bash
+# Use OpenAI
+docker run --rm \
+  -e SLACK_ACCESS_TOKEN=your-token \
+  -e OPENAI_API_KEY=sk-... \
+  -v $(pwd)/output:/app/output \
+  threadcrumb:multi-ai generate --ai-provider openai
+
+# Use Anthropic
+docker run --rm \
+  -e SLACK_ACCESS_TOKEN=your-token \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -v $(pwd)/output:/app/output \
+  threadcrumb:multi-ai generate --ai-provider anthropic
+```
+
+### High-Performance Export
+
+```bash
+docker run --rm \
+  -e SLACK_ACCESS_TOKEN=your-token \
+  -v $(pwd)/output:/app/output \
+  -v $(pwd)/cache:/root/.threadcrumb \
+  threadcrumb:full generate \
+    --parallel \
+    --max-workers 8 \
+    --use-sqlite-cache \
+    --build-index
+```
+
+### Secure Export with PII Redaction
+
+```bash
+docker run --rm \
+  -e SLACK_ACCESS_TOKEN=your-token \
+  -v $(pwd)/output:/app/output \
+  threadcrumb:secure generate \
+    --redact-pii \
+    --encrypt-cache \
+    --format html
+```
 
 ### Custom Docker Image
 

@@ -56,11 +56,15 @@ ai-anthropic = [
 interactive = [
     "rich>=13.0.0",
 ]
+security = [
+    "cryptography>=41.0.0",
+]
 all = [
     "whoosh>=2.7.4",
     "openai>=1.0.0",
     "anthropic>=0.18.0",
     "rich>=13.0.0",
+    "cryptography>=41.0.0",
 ]
 
 [project.scripts]

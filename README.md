@@ -11,14 +11,37 @@ AI-powered Slack workspace analyzer and wiki generator. ThreadCrumb connects to 
 - **Rate limit handling** with exponential backoff
 - **File attachment processing** with local caching
 
-### 🤖 AI Integration (AWS Bedrock)
-- **Model flexibility** - configurable AI model selection (Claude 3 Sonnet, Haiku, Opus)
+### 🤖 AI Integration (Multiple Providers)
+- **Multiple AI providers** - AWS Bedrock, OpenAI, and Anthropic
+- **Model flexibility** - configurable AI model selection (Claude 3, GPT-4, etc.)
 - **Content categorization** with custom taxonomies
 - **Topic extraction** and clustering
 - **Summary generation** for threads and channels
 - **Q&A pair generation** from discussions
 - **Sentiment/importance scoring** for content prioritization
 - **Fallback mode** when AI services are unavailable
+
+### ⚡ Performance & Scalability
+- **Parallel processing** - process multiple channels concurrently
+- **SQLite caching** - efficient database caching for better performance
+- **Export resumption** - resume interrupted exports with checkpoints
+- **Incremental sync** - only fetch new messages since last sync
+
+### 🔍 Search & Discovery
+- **Full-text search indexing** - build searchable indices of your content
+- **Whoosh integration** - optional advanced search capabilities
+- **Search command** - query your wiki from the CLI
+
+### 🎨 User Experience
+- **Interactive mode** - guided workflows with rich TUI
+- **Progress tracking** - real-time progress bars and status
+- **Colored output** - better readability with syntax highlighting
+
+### 🔒 Security & Compliance
+- **PII detection** - automatic detection of sensitive information
+- **Content redaction** - mask or remove PII from exports
+- **Encryption at rest** - encrypt cached data with AES-128
+- **Audit logging** - comprehensive activity logging for compliance
 
 ### 📊 Content Processing Pipeline
 ```
@@ -50,14 +73,35 @@ cd threadcrumb
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install package
+# Install package (basic features)
 pip install -e .
+
+# Or install with all optional features
+pip install -e .[all]
 ```
 
-### Install dependencies only
+### Optional Features
+
+Install specific feature sets as needed:
 
 ```bash
-pip install -r requirements.txt
+# Search functionality with Whoosh
+pip install threadcrumb[search]
+
+# OpenAI integration
+pip install threadcrumb[ai-openai]
+
+# Anthropic (Claude) integration
+pip install threadcrumb[ai-anthropic]
+
+# Interactive mode with rich TUI
+pip install threadcrumb[interactive]
+
+# Security features (encryption, PII detection)
+pip install threadcrumb[security]
+
+# All features
+pip install threadcrumb[all]
 ```
 
 ## Quick Start
@@ -140,6 +184,15 @@ threadcrumb generate [OPTIONS]
 - `--format [markdown|html|json|xml]` - Output format (default: markdown)
 - `--no-ai` - Disable AI processing (faster)
 - `--no-cache` - Disable message caching
+- `--parallel` - Process channels in parallel for better performance
+- `--max-workers INTEGER` - Max parallel workers (default: 4)
+- `--interactive, -i` - Interactive mode with guided prompts
+- `--build-index` - Build search index after generation
+- `--ai-provider [bedrock|openai|anthropic]` - AI provider to use (default: bedrock)
+- `--use-sqlite-cache` - Use SQLite cache instead of file cache
+- `--resume` - Resume previous interrupted export
+- `--redact-pii` - Detect and redact PII from exports
+- `--encrypt-cache` - Encrypt cached data at rest
 
 **Examples:**
 
@@ -147,14 +200,23 @@ threadcrumb generate [OPTIONS]
 # Generate Markdown wiki from all channels
 threadcrumb generate
 
-# Generate HTML wiki from specific channels
-threadcrumb generate --channels "general,engineering" --format html --output ./wiki
+# Interactive mode with guided selection
+threadcrumb generate --interactive
 
-# Generate JSON export excluding private channels
-threadcrumb generate --exclude "private-channel,secret-stuff" --format json
+# Parallel processing with search indexing
+threadcrumb generate --parallel --build-index
 
-# Quick export without AI processing
-threadcrumb generate --no-ai --format markdown
+# Use OpenAI with PII redaction
+threadcrumb generate --ai-provider openai --redact-pii
+
+# Resume interrupted export
+threadcrumb generate --resume
+
+# High-performance export with all features
+threadcrumb generate --parallel --max-workers 8 --use-sqlite-cache --build-index
+
+# Secure export with encryption and PII redaction
+threadcrumb generate --redact-pii --encrypt-cache --format html
 ```
 
 #### `threadcrumb export-confluence`
@@ -195,6 +257,35 @@ threadcrumb export-confluence --structure by-category
 ```
 
 See [Confluence Export Guide](docs/CONFLUENCE_EXPORT.md) for detailed documentation.
+
+#### `threadcrumb search`
+Search the generated wiki content.
+
+```bash
+threadcrumb search QUERY [OPTIONS]
+```
+
+**Arguments:**
+- `QUERY` - Search query string
+
+**Options:**
+- `--index-path PATH` - Path to search index (default: output/search_index.json)
+- `--limit INTEGER` - Maximum results to return (default: 10)
+
+**Examples:**
+
+```bash
+# Search for a topic
+threadcrumb search "authentication"
+
+# Search with custom index path
+threadcrumb search "database" --index-path ./wiki/search_index.json
+
+# Limit results
+threadcrumb search "error" --limit 5
+```
+
+Note: Generate search index with `--build-index` flag when running `threadcrumb generate`.
 
 #### `threadcrumb list-channels`
 List all channels in workspace.

@@ -16,9 +16,16 @@ RUN apt-get update && apt-get install -y \
 COPY pyproject.toml README.md ./
 COPY threadcrumb ./threadcrumb
 
+# Build argument for optional features
+ARG INSTALL_EXTRAS=""
+
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e .
+    if [ -z "$INSTALL_EXTRAS" ]; then \
+      pip install --no-cache-dir -e .; \
+    else \
+      pip install --no-cache-dir -e ".[$INSTALL_EXTRAS]"; \
+    fi
 
 # Create directories for config and output
 RUN mkdir -p /root/.threadcrumb /app/output
