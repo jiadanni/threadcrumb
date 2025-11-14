@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  threadcrumb:
+    build: .
+    image: threadcrumb:latest
+    container_name: threadcrumb
+    volumes:
+      # Mount config directory
+      - ./config:/root/.threadcrumb
+      # Mount output directory
+      - ./output:/app/output
+      # Mount cache directory
+      - ./cache:/app/.threadcrumb/cache
+    environment:
+      # Slack configuration
+      - SLACK_CLIENT_ID=${SLACK_CLIENT_ID}
+      - SLACK_CLIENT_SECRET=${SLACK_CLIENT_SECRET}
+      - SLACK_ACCESS_TOKEN=${SLACK_ACCESS_TOKEN}
+
+      # AWS configuration (for Bedrock AI)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_PROFILE=${AWS_PROFILE}
+
+      # AI configuration
+      - AI_MODEL=${AI_MODEL}
+
+      # Confluence configuration
+      - CONFLUENCE_URL=${CONFLUENCE_URL}
+      - CONFLUENCE_USERNAME=${CONFLUENCE_USERNAME}
+      - CONFLUENCE_API_TOKEN=${CONFLUENCE_API_TOKEN}
+      - CONFLUENCE_SPACE_KEY=${CONFLUENCE_SPACE_KEY}
+
+    # Override command for specific operations
+    # command: generate --format html
+    # command: export-confluence --dry-run
+    # command: list-channels
+
+  # Scheduled wiki generation (optional)
+  threadcrumb-cron:
+    build: .
+    image: threadcrumb:latest
+    container_name: threadcrumb-cron
+    volumes:
+      - ./config:/root/.threadcrumb
+      - ./output:/app/output
+      - ./cache:/app/.threadcrumb/cache
+    environment:
+      - SLACK_ACCESS_TOKEN=${SLACK_ACCESS_TOKEN}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - CONFLUENCE_URL=${CONFLUENCE_URL}
+      - CONFLUENCE_USERNAME=${CONFLUENCE_USERNAME}
+      - CONFLUENCE_API_TOKEN=${CONFLUENCE_API_TOKEN}
+      - CONFLUENCE_SPACE_KEY=${CONFLUENCE_SPACE_KEY}
+    # Use a cron scheduler or run periodically
+    command: sh -c "while true; do threadcrumb export-confluence; sleep 86400; done"
+    restart: unless-stopped
+    profiles:
+      - cron
