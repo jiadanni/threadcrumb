@@ -3,7 +3,7 @@
 from .pii_detector import PIIDetector, PIIType
 from .redactor import ContentRedactor, RedactionStrategy
 from .encryption import DataEncryptor
-from .audit import AuditLogger, AuditEvent, AuditLevel
+from .audit import AuditLogger, AuditEvent, AuditLevel, AuditEventType
 
 __all__ = [
     'PIIDetector',
@@ -13,5 +13,6 @@ __all__ = [
     'DataEncryptor',
     'AuditLogger',
     'AuditEvent',
-    'AuditLevel'
+    'AuditLevel',
+    'AuditEventType'
 ]

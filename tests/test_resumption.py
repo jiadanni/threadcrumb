@@ -301,8 +301,8 @@ class TestCheckpointManager:
         all_channels = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10"]
         pending = loaded.get_pending_channels(all_channels)
 
-        # Should have 6 pending (skipping completed C1, C2, C4)
-        assert len(pending) == 6
+        # Should have 7 pending (skipping completed C1, C2, C4)
+        assert len(pending) == 7
         assert "C1" not in pending  # Already completed
         assert "C3" in pending  # Failed, should retry
         assert "C5" in pending  # Not yet processed

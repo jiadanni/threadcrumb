@@ -188,7 +188,7 @@ def create_ai_provider(
     elif provider == "anthropic":
         return AnthropicProvider(**kwargs)
     elif provider == "bedrock":
-        from .bedrock import BedrockClient
+        from threadcrumb.ai.bedrock import BedrockClient
         return BedrockClient(**kwargs)
     else:
         raise ValueError(f"Unknown provider: {provider}")
@@ -209,7 +209,7 @@ def get_ai_provider(provider_name: str, config):
 
     try:
         if provider_name == "bedrock":
-            from .bedrock import BedrockClient
+            from threadcrumb.ai.bedrock import BedrockClient
             return BedrockClient(
                 region=config.ai.region,
                 model_name=config.ai.model_name,

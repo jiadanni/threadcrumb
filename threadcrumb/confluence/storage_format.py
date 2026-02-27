@@ -5,7 +5,7 @@ Converts Markdown and structured content to Confluence Storage Format (XHTML-bas
 """
 
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from html import escape
 import logging
 
