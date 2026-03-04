@@ -16,7 +16,7 @@ from ..config import ScrapeConfig
 from ..exceptions import NavigationError, ScrapeError
 from ..models import ChannelExport, Message, Thread
 from ..utils.progress import progress_bar
-from .parser import get_reply_count, parse_message_element, parse_messages_from_page
+from .parser import get_reply_count, parse_message_element
 from .thread import expand_thread
 
 logger = logging.getLogger("slackcrumb")

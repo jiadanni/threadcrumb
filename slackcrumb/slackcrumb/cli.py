@@ -210,6 +210,71 @@ def status():
     click.echo(f"\nResume with: slackcrumb scrape --resume <ID>")
 
 
+@cli.command()
+@click.option("--workspace-url", default=None, help="Override workspace URL from config.")
+@click.pass_context
+def channels(ctx, workspace_url):
+    """List all channels visible in the sidebar."""
+    config = ctx.obj["config"]
+
+    if workspace_url:
+        config.workspace_url = workspace_url
+    if not config.workspace_url:
+        click.echo(f"{Fore.RED}No workspace URL. Use --workspace-url or set it in config.{Style.RESET_ALL}", err=True)
+        sys.exit(1)
+
+    async def _channels():
+        from .browser.session import BrowserSession
+        from .browser.auth import is_logged_in, wait_for_login
+
+        session = BrowserSession(config.browser)
+        try:
+            await session.start()
+            page = await session.new_page()
+
+            await page.goto(config.workspace_url, wait_until="domcontentloaded")
+            if not await is_logged_in(page):
+                click.echo(f"{Fore.YELLOW}Not logged in. Opening browser for login...{Style.RESET_ALL}")
+                config.browser.headless = False
+                await session.close()
+                session = BrowserSession(config.browser)
+                await session.start()
+                page = await session.new_page()
+                await wait_for_login(page, config.workspace_url)
+
+            # Wait for sidebar to load
+            await page.wait_for_selector('[data-qa="channel-sidebar"]', timeout=config.browser.timeout)
+            await asyncio.sleep(1)
+
+            # Channels sit inside [data-qa="channel-sidebar-channel"] elements
+            # Each contains a [data-qa="channel_sidebar_name_XXXX"] child
+            channel_els = await page.query_selector_all('[data-qa="channel-sidebar-channel"]')
+            names = []
+            for el in channel_els:
+                name_el = await el.query_selector('[data-qa^="channel_sidebar_name_"]')
+                if name_el:
+                    qa = await name_el.get_attribute("data-qa")
+                    if qa:
+                        name = qa[len("channel_sidebar_name_"):]
+                        names.append(name)
+
+            if not names:
+                click.echo("No channels found. The sidebar may not have loaded fully.")
+                return
+
+            click.echo(f"\n{Fore.CYAN}{len(names)} channels:{Style.RESET_ALL}\n")
+            for name in sorted(names):
+                click.echo(f"  #{name}")
+
+        except SlackcrumbError as e:
+            click.echo(f"{Fore.RED}Error: {e}{Style.RESET_ALL}", err=True)
+            sys.exit(1)
+        finally:
+            await session.close()
+
+    asyncio.run(_channels())
+
+
 @cli.command("config-init")
 @click.option("--force", is_flag=True, help="Overwrite existing config.")
 def config_init(force):
