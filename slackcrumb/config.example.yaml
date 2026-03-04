@@ -1,0 +1,26 @@
+# Slackcrumb configuration
+# Copy to ~/.slackcrumb/config.yaml
+
+workspace_url: "https://your-workspace.slack.com"
+
+browser:
+  headless: true
+  viewport_width: 1280
+  viewport_height: 900
+  slow_mo: 0
+  timeout: 30000
+
+scrape:
+  channels: []
+  expand_threads: true
+  scroll_pause: 1.5
+  scroll_max_retries: 5
+  batch_size: 50
+  retry_count: 3
+  retry_backoff: 2.0
+  navigation_timeout: 60000
+
+output:
+  format: json
+  output_dir: "."
+  filename_template: "{channel}_{date}"
