@@ -7,7 +7,7 @@ import uuid
 import click
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Optional
 
 from .config import Config
 from .slack import SlackClient, MessageFetcher, ThreadReconstructor
@@ -165,10 +165,9 @@ def execute_generate_command(
             )
 
         # Initialize encryption
-        encryptor = None
         if encrypt_cache:
             click.echo("Enabling cache encryption...")
-            encryptor = DataEncryptor()
+            DataEncryptor()
             audit_logger.log(
                 event_type=AuditEventType.ENCRYPTION_ENABLED,
                 message="Cache encryption enabled",
@@ -381,11 +380,11 @@ def execute_generate_command(
             thread_count=total_threads
         )
 
-        click.echo(click.style(f"\n✓ Wiki generated successfully!", fg='green'))
+        click.echo(click.style("\n✓ Wiki generated successfully!", fg='green'))
         click.echo(f"Output location: {output_dir}")
 
         # Print statistics
-        click.echo(f"\nStatistics:")
+        click.echo("\nStatistics:")
         click.echo(f"  Channels: {len(processed_channels)}")
         click.echo(f"  Threads: {total_threads}")
 

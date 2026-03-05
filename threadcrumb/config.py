@@ -5,7 +5,7 @@ Configuration management for ThreadCrumb.
 import os
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Optional, List
 from dataclasses import dataclass, field, asdict
 
 

@@ -5,7 +5,7 @@ Converts Markdown and structured content to Confluence Storage Format (XHTML-bas
 """
 
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from html import escape
 import logging
 
@@ -49,7 +49,12 @@ class StorageFormatConverter:
         html = re.sub(r'`([^`]+)`', r'<code>\1</code>', html)
 
         # Links
-        html = re.sub(r'\[([^\]]+)\]\(([^\)]+)\)', r'<ac:link><ri:url ri:value="\2"/><ac:plain-text-link-body><![CDATA[\1]]></ac:plain-text-link-body></ac:link>', html)
+        html = re.sub(
+            r'\[([^\]]+)\]\(([^\)]+)\)',
+            r'<ac:link><ri:url ri:value="\2"/>'
+            r'<ac:plain-text-link-body><![CDATA[\1]]>'
+            r'</ac:plain-text-link-body></ac:link>',
+            html)
 
         # Unordered lists
         html = re.sub(r'^\s*[-*+]\s+(.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
@@ -249,7 +254,6 @@ class StorageFormatConverter:
             return f'<div>{content}</div>'
 
         sections = content.split('|||')  # Split marker
-        column_width = 100 // columns
 
         markup = '<ac:layout><ac:layout-section ac:type="two_equal">'
         for section in sections:
@@ -408,7 +412,11 @@ Participants: {metadata.get('participant_count', 0)}
 <p><strong>{self.converter.escape_special_chars(user)}</strong> - <em>{timestamp}</em></p>
 <p>{self.converter.escape_special_chars(text)}</p>
 '''
-                content += f'<div style="border-left: 3px solid #0052CC; padding-left: 10px; margin-bottom: 15px;">{msg_content}</div>'
+                content += (
+                    '<div style="border-left: 3px solid #0052CC;'
+                    ' padding-left: 10px; margin-bottom: 15px;">'
+                    f'{msg_content}</div>'
+                )
 
         return content
 

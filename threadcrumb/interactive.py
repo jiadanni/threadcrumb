@@ -12,7 +12,6 @@ try:
     from rich.prompt import Prompt, Confirm
     from rich.panel import Panel
     from rich.progress import Progress
-    from rich import print as rprint
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False

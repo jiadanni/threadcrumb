@@ -4,16 +4,19 @@ Command-line interface for ThreadCrumb.
 
 import sys
 import click
-import uuid
 from pathlib import Path
 from typing import Optional
 import logging
 
 from . import __version__
 from .config import Config, load_config, get_default_config_path
-from .slack import SlackAuthenticator, SlackClient
+from .slack import SlackAuthenticator, SlackClient, MessageFetcher, ThreadReconstructor
 from .confluence import export_to_confluence
 from .utils import setup_logging
+from .utils.progress import ProgressTracker
+from .ai import BedrockClient, AIProcessor
+from .processing import ContentPipeline
+from .search import SearchIndex
 from .cli_commands import execute_generate_command
 
 logger = logging.getLogger(__name__)
@@ -86,14 +89,17 @@ def auth(config: Config, client_id: str, client_secret: str, port: int):
 @click.option('--max-workers', type=int, default=4, help='Max parallel workers (default: 4)')
 @click.option('--interactive', '-i', is_flag=True, help='Interactive mode with guided prompts')
 @click.option('--build-index', is_flag=True, help='Build search index after generation')
-@click.option('--ai-provider', type=click.Choice(['bedrock', 'openai', 'anthropic']), default='bedrock', help='AI provider to use')
+@click.option('--ai-provider', type=click.Choice(['bedrock', 'openai', 'anthropic']),
+              default='bedrock', help='AI provider to use')
 @click.option('--use-sqlite-cache', is_flag=True, help='Use SQLite cache instead of file cache')
 @click.option('--resume', is_flag=True, help='Resume previous interrupted export')
 @click.option('--redact-pii', is_flag=True, help='Detect and redact PII from exports')
 @click.option('--encrypt-cache', is_flag=True, help='Encrypt cached data at rest')
 @click.pass_obj
-def generate(config: Config, channels: Optional[str], exclude: Optional[str], output: str, format: str, no_ai: bool, no_cache: bool,
-             parallel: bool, max_workers: int, interactive: bool, build_index: bool, ai_provider: str, use_sqlite_cache: bool,
+def generate(config: Config, channels: Optional[str], exclude: Optional[str],
+             output: str, format: str, no_ai: bool, no_cache: bool,
+             parallel: bool, max_workers: int, interactive: bool,
+             build_index: bool, ai_provider: str, use_sqlite_cache: bool,
              resume: bool, redact_pii: bool, encrypt_cache: bool):
     """Generate wiki from Slack workspace."""
     execute_generate_command(
@@ -126,7 +132,8 @@ def generate(config: Config, channels: Optional[str], exclude: Optional[str], ou
 @click.option('--api-token', help='Confluence API token (or set CONFLUENCE_API_TOKEN env var)')
 @click.option('--space-key', help='Confluence space key (or set CONFLUENCE_SPACE_KEY env var)')
 @click.option('--parent-page-id', help='Parent page ID for wiki root')
-@click.option('--structure', type=click.Choice(['flat', 'hierarchical', 'by-category']), default='flat', help='Page organization structure')
+@click.option('--structure', type=click.Choice(['flat', 'hierarchical', 'by-category']),
+              default='flat', help='Page organization structure')
 @click.option('--dry-run', is_flag=True, help='Preview without creating pages')
 @click.pass_obj
 def export_confluence(
@@ -157,7 +164,9 @@ def export_confluence(
         space_key = space_key or config.confluence.space_key
 
         if not all([confluence_url, username, api_token, space_key]):
-            click.echo(click.style("✗ Missing Confluence credentials. Provide via options or config file.", fg='red'), err=True)
+            click.echo(click.style(
+                "✗ Missing Confluence credentials. Provide via options or config file.",
+                fg='red'), err=True)
             click.echo("\nRequired:")
             click.echo("  --confluence-url or CONFLUENCE_URL")
             click.echo("  --username or CONFLUENCE_USERNAME")
@@ -296,16 +305,16 @@ def export_confluence(
         )
 
         if dry_run:
-            click.echo(click.style(f"\n✓ Dry run completed!", fg='green'))
+            click.echo(click.style("\n✓ Dry run completed!", fg='green'))
             click.echo(f"Would create {len(page_map)} pages in Confluence")
         else:
-            click.echo(click.style(f"\n✓ Successfully exported to Confluence!", fg='green'))
+            click.echo(click.style("\n✓ Successfully exported to Confluence!", fg='green'))
             click.echo(f"Created {len(page_map)} pages in space {space_key}")
             click.echo(f"\nView your wiki: {confluence_url}/wiki/spaces/{space_key}")
 
         # Print statistics
         total_threads = sum(len(ch.threads) for ch in processed_channels)
-        click.echo(f"\nStatistics:")
+        click.echo("\nStatistics:")
         click.echo(f"  Channels: {len(processed_channels)}")
         click.echo(f"  Threads: {total_threads}")
         click.echo(f"  Pages Created: {len(page_map)}")

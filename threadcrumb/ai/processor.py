@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 import logging
 
-from .bedrock import BedrockClient, AIResponse
+from .bedrock import BedrockClient
 
 logger = logging.getLogger(__name__)
 

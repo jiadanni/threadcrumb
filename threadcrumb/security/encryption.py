@@ -4,7 +4,6 @@ Data encryption for sensitive information at rest.
 Uses Fernet symmetric encryption (AES-128 with HMAC authentication).
 """
 
-import base64
 import logging
 import os
 from pathlib import Path

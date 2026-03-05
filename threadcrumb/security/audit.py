@@ -164,7 +164,7 @@ class AuditLogger:
         """Log successful authentication."""
         self.log(
             event_type=AuditEventType.AUTH_SUCCESS,
-            message=f"User authenticated successfully",
+            message="User authenticated successfully",
             level=AuditLevel.INFO,
             user=user,
             workspace_id=workspace_id
@@ -174,7 +174,7 @@ class AuditLogger:
         """Log failed authentication."""
         self.log(
             event_type=AuditEventType.AUTH_FAILURE,
-            message=f"Authentication failed",
+            message="Authentication failed",
             level=AuditLevel.WARNING,
             user=user,
             error=error

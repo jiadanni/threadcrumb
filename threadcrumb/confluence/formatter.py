@@ -2,12 +2,11 @@
 Confluence formatter - export processed content directly to Confluence.
 """
 
-from typing import List, Dict, Any, Optional
-from pathlib import Path
+from typing import List, Dict, Optional
 import logging
 
 from ..processing.pipeline import ProcessedChannel, ProcessedThread
-from .client import ConfluenceClient, ConfluencePage
+from .client import ConfluenceClient
 from .storage_format import StorageFormatConverter, ConfluencePageBuilder
 
 logger = logging.getLogger(__name__)
@@ -265,7 +264,7 @@ Threads: {len(channel.threads)}
                     self.client.add_attachment(
                         page_id=page_id,
                         file_path=tmp_path,
-                        comment=f"From Slack message"
+                        comment="From Slack message"
                     )
 
                     # Clean up

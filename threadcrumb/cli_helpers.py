@@ -6,13 +6,12 @@ from pathlib import Path
 from typing import List, Optional, Dict
 
 from .config import Config
-from .slack import SlackClient, MessageFetcher, ThreadReconstructor
-from .ai import BedrockClient, AIProcessor
+from .slack import SlackClient, MessageFetcher
+from .ai import AIProcessor
 from .ai.providers import get_ai_provider
-from .processing import ContentPipeline
 from .cache.sqlite_cache import SQLiteCache
 from .security import PIIDetector, ContentRedactor, AuditLogger, AuditEventType
-from .resumption import CheckpointManager, ExportState
+from .resumption import CheckpointManager, ExportCheckpoint
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +224,10 @@ def handle_resumption(
 
     if checkpoint:
         click.echo(f"Found resumable export from {checkpoint.updated_at}")
-        click.echo(f"Progress: {checkpoint.get_progress_percentage():.1f}% ({len(checkpoint.processed_channels)}/{checkpoint.total_channels} channels)")
+        progress = checkpoint.get_progress_percentage()
+        done = len(checkpoint.processed_channels)
+        total = checkpoint.total_channels
+        click.echo(f"Progress: {progress:.1f}% ({done}/{total} channels)")
 
         if click.confirm("Resume this export?"):
             return checkpoint

@@ -297,7 +297,7 @@ class SearchIndex:
 try:
     from whoosh.index import create_in, open_dir, exists_in
     from whoosh.fields import Schema, TEXT, ID, KEYWORD
-    from whoosh.qparser import QueryParser, MultifieldParser
+    from whoosh.qparser import MultifieldParser
     from whoosh import scoring
 
     WHOOSH_AVAILABLE = True

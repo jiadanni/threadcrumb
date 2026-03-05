@@ -257,4 +257,3 @@ def get_ai_provider(provider_name: str, config):
     except Exception as e:
         logger.error(f"Failed to initialize {provider_name} provider: {e}")
         return None
-

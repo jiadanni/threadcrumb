@@ -4,7 +4,7 @@ Content redaction for removing or masking PII.
 
 import logging
 from enum import Enum
-from typing import Dict, Optional
+from typing import Dict
 
 from .pii_detector import PIIDetector, PIIMatch, PIIType
 

@@ -6,13 +6,10 @@ import json
 import webbrowser
 from pathlib import Path
 from typing import Optional, Dict, Any
-from urllib.parse import urlencode
 import http.server
 import socketserver
-from threading import Thread
 from slack_sdk import WebClient
 from slack_sdk.oauth import AuthorizeUrlGenerator
-from slack_sdk.oauth.installation_store import Installation
 
 
 class OAuthCallbackHandler(http.server.SimpleHTTPRequestHandler):
@@ -158,14 +155,14 @@ class SlackAuthenticator:
         # Generate authorization URL
         auth_url = self.get_authorization_url()
 
-        print(f"Opening browser for Slack authentication...")
+        print("Opening browser for Slack authentication...")
         print(f"If the browser doesn't open, visit: {auth_url}")
 
         # Open browser
         webbrowser.open(auth_url)
 
         # Start callback server
-        print(f"Waiting for authorization...")
+        print("Waiting for authorization...")
         code = self.start_callback_server()
 
         if not code:
