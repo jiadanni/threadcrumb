@@ -7,7 +7,6 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 
 from .config import DEFAULT_CONFIG_DIR
 from .exceptions import CheckpointError

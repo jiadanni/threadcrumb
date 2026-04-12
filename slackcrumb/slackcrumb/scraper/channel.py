@@ -13,7 +13,7 @@ from ..browser import selectors
 from ..browser.auth import detect_session_expiry, handle_reauth
 from ..checkpoint import Checkpoint
 from ..config import ScrapeConfig
-from ..exceptions import NavigationError, ScrapeError
+from ..exceptions import NavigationError
 from ..models import ChannelExport, Message, Thread
 from ..utils.progress import progress_bar
 from .parser import get_reply_count, parse_message_element

@@ -14,8 +14,11 @@ TAB_RAIL = '[data-qa="tab_rail_desktop"]'
 
 # --- Channel sidebar ---
 CHANNEL_SIDEBAR_CHANNEL = '[data-qa="channel-sidebar-channel"]'
+CHANNEL_SIDEBAR_DM = '[data-qa="channel-sidebar-dm"]'
 CHANNEL_SIDEBAR_NAME = ".p-channel_sidebar__name"
 CHANNEL_SIDEBAR_LINK = ".p-channel_sidebar__link"
+CHANNEL_SIDEBAR_SECTION_HEADER = '[data-qa="channel-sidebar-section-header-button"]'
+CHANNEL_SIDEBAR_SECTION_LABEL = ".p-channel_sidebar__section_heading_label"
 
 # --- Message list ---
 MESSAGE_LIST_CONTAINER = ".c-virtual_list__scroll_container"

@@ -8,7 +8,6 @@ import re
 from playwright.async_api import ElementHandle, Page
 
 from ..browser import selectors
-from ..exceptions import ParseError
 from ..models import Message, Reaction
 
 logger = logging.getLogger("slackcrumb")

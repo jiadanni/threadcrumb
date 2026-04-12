@@ -16,13 +16,16 @@ playwright install chromium
 # 1. Log in (opens browser for manual SSO/password login)
 slackcrumb login --workspace-url https://your-team.slack.com
 
-# 2. Scrape channels
+# 2. List visible channels
+slackcrumb channels --workspace-url https://your-team.slack.com
+
+# 3. Scrape channels
 slackcrumb scrape --channels general --format json --oldest-date 2025-09-01
 
-# 3. Search-based scrape
+# 4. Search-based scrape
 slackcrumb scrape --search "pendo" --format markdown --workspace-url https://your-team.slack.com
 
-# 4. Resume interrupted export
+# 5. Resume interrupted export
 slackcrumb status
 slackcrumb scrape --resume <export-id>
 ```
@@ -32,6 +35,7 @@ slackcrumb scrape --resume <export-id>
 | Command | Purpose |
 |---------|---------|
 | `slackcrumb login` | Manual browser login; session persists across runs |
+| `slackcrumb channels` | List all channels visible in the sidebar |
 | `slackcrumb scrape` | Scrape channels or search results |
 | `slackcrumb status` | List resumable exports |
 | `slackcrumb config-init` | Create default config at `~/.slackcrumb/config.yaml` |

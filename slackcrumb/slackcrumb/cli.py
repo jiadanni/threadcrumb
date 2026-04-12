@@ -207,7 +207,7 @@ def status():
             f"{cp['export_id']:<14} {cp['workspace']:<35} {cp['channels']:<18} "
             f"{cp['updated'][:19]:<22} {search}"
         )
-    click.echo(f"\nResume with: slackcrumb scrape --resume <ID>")
+    click.echo("\nResume with: slackcrumb scrape --resume <ID>")
 
 
 @cli.command()
@@ -226,6 +226,10 @@ def channels(ctx, workspace_url):
     async def _channels():
         from .browser.session import BrowserSession
         from .browser.auth import is_logged_in, wait_for_login
+        from .browser.selectors import (
+            CHANNEL_SIDEBAR,
+            CHANNEL_SIDEBAR_SECTION_HEADER,
+        )
 
         session = BrowserSession(config.browser)
         try:
@@ -243,28 +247,116 @@ def channels(ctx, workspace_url):
                 await wait_for_login(page, config.workspace_url)
 
             # Wait for sidebar to load
-            await page.wait_for_selector('[data-qa="channel-sidebar"]', timeout=config.browser.timeout)
+            await page.wait_for_selector(CHANNEL_SIDEBAR, timeout=config.browser.timeout)
             await asyncio.sleep(1)
 
-            # Channels sit inside [data-qa="channel-sidebar-channel"] elements
-            # Each contains a [data-qa="channel_sidebar_name_XXXX"] child
-            channel_els = await page.query_selector_all('[data-qa="channel-sidebar-channel"]')
-            names = []
-            for el in channel_els:
-                name_el = await el.query_selector('[data-qa^="channel_sidebar_name_"]')
-                if name_el:
-                    qa = await name_el.get_attribute("data-qa")
-                    if qa:
-                        name = qa[len("channel_sidebar_name_"):]
-                        names.append(name)
+            # Expand all collapsed sidebar sections (folders) so their
+            # channels become visible in the DOM.
+            section_headers = await page.query_selector_all(CHANNEL_SIDEBAR_SECTION_HEADER)
+            for header in section_headers:
+                expanded = await header.get_attribute("aria-expanded")
+                if expanded == "false":
+                    await header.click()
+                    await asyncio.sleep(0.3)
 
-            if not names:
+            # Hover over the sidebar so scroll events target it
+            sidebar = await page.query_selector(CHANNEL_SIDEBAR)
+            if sidebar:
+                await sidebar.hover()
+
+            # Scroll through the sidebar to capture all channels that are
+            # lazily rendered via virtual scrolling.
+            # channels_by_section maps section_name -> list[channel_name]
+            channels_by_section: dict[str, list[str]] = {}
+            seen_names: set[str] = set()
+
+            async def collect_visible_channels():
+                """Scrape channels currently rendered in the sidebar DOM."""
+                # Build section boundaries from JS to map channels to sections
+                mapping = await page.evaluate("""() => {
+                    const sidebar = document.querySelector('[data-qa="channel-sidebar"]');
+                    if (!sidebar) return [];
+                    const sections = sidebar.querySelectorAll(
+                        '[data-qa="channel-sidebar-section-header-button"]'
+                    );
+                    const results = [];
+                    sections.forEach(sec => {
+                        const label = sec.querySelector(
+                            '.p-channel_sidebar__section_heading_label'
+                        );
+                        const sectionName = label ? label.innerText.trim() : 'Other';
+                        // Walk siblings after the section header's parent container
+                        // to find channels belonging to this section
+                        const container = sec.closest(
+                            '.p-channel_sidebar__section_heading'
+                        )?.parentElement;
+                        if (!container) return;
+                        const items = container.querySelectorAll(
+                            '[data-qa="channel-sidebar-channel"]'
+                        );
+                        const channels = [];
+                        items.forEach(item => {
+                            const nameEl = item.querySelector(
+                                '[data-qa^="channel_sidebar_name_"]'
+                            );
+                            if (nameEl) {
+                                const qa = nameEl.getAttribute('data-qa');
+                                if (qa) channels.push(
+                                    qa.substring('channel_sidebar_name_'.length)
+                                );
+                            }
+                        });
+                        results.push({section: sectionName, channels: channels});
+                    });
+                    return results;
+                }""")
+
+                for entry in mapping:
+                    section = entry.get("section", "Other")
+                    if section not in channels_by_section:
+                        channels_by_section[section] = []
+                    for ch in entry.get("channels", []):
+                        if ch not in seen_names:
+                            seen_names.add(ch)
+                            channels_by_section[section].append(ch)
+
+            # Initial collection
+            await collect_visible_channels()
+
+            # Scroll through the sidebar to discover lazily-loaded channels
+            if sidebar:
+                box = await sidebar.bounding_box()
+                if box:
+                    cx = box["x"] + box["width"] / 2
+                    cy = box["y"] + box["height"] / 2
+                    prev_count = 0
+                    stale_rounds = 0
+                    for _ in range(30):
+                        await page.mouse.move(cx, cy)
+                        await page.mouse.wheel(0, 500)
+                        await asyncio.sleep(0.5)
+                        await collect_visible_channels()
+                        if len(seen_names) == prev_count:
+                            stale_rounds += 1
+                            if stale_rounds >= 3:
+                                break
+                        else:
+                            stale_rounds = 0
+                            prev_count = len(seen_names)
+
+            if not seen_names:
                 click.echo("No channels found. The sidebar may not have loaded fully.")
                 return
 
-            click.echo(f"\n{Fore.CYAN}{len(names)} channels:{Style.RESET_ALL}\n")
-            for name in sorted(names):
-                click.echo(f"  #{name}")
+            click.echo(f"\n{Fore.CYAN}{len(seen_names)} channels:{Style.RESET_ALL}\n")
+            for section in sorted(channels_by_section.keys()):
+                names = sorted(channels_by_section[section])
+                if not names:
+                    continue
+                click.echo(f"  {Fore.YELLOW}{section}{Style.RESET_ALL}")
+                for name in names:
+                    click.echo(f"    #{name}")
+                click.echo()
 
         except SlackcrumbError as e:
             click.echo(f"{Fore.RED}Error: {e}{Style.RESET_ALL}", err=True)
