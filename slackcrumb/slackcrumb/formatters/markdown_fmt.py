@@ -84,12 +84,13 @@ def format_markdown(result: ExportResult) -> str:
     return "\n".join(lines)
 
 
-def write_markdown(result: ExportResult, config: OutputConfig) -> Path:
+def write_markdown(result: ExportResult, config: OutputConfig,
+                   date_str: str | None = None) -> Path:
     """Write ExportResult to a Markdown file and return the path."""
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    date_str = datetime.now().strftime("%Y%m%d")
+    date_str = date_str or datetime.now().strftime("%Y%m%d")
     channels_str = "_".join(c.name for c in result.channels[:3])
     if len(result.channels) > 3:
         channels_str += f"_+{len(result.channels) - 3}"

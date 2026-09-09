@@ -44,12 +44,26 @@ slackcrumb scrape --resume <export-id>
 
 - `--channels` / `-ch` — Channel names (repeatable)
 - `--search` / `-s` — Search query
-- `--oldest-date` — Stop at this date (YYYY-MM-DD)
+- `--oldest-date` — Stop at this date (YYYY-MM-DD, inclusive)
+- `--newest-date` — Skip messages after this date (YYYY-MM-DD, inclusive)
+- `--exclude-bots` / `--include-bots` — Skip messages from Slack apps and bots (default: include)
 - `--format` / `-f` — `json` or `markdown`
 - `--output` / `-o` — Output directory
+- `--split-by month` — Write one file per month under `<output>/<year>/`, named `<channel>_<YYYY-MM>`
 - `--headless` / `--no-headless` — Browser visibility
 - `--expand-threads` / `--no-expand-threads` — Scrape thread replies
 - `--resume` — Resume by export ID
+
+### Example: monthly knowledge-base export
+
+```bash
+slackcrumb scrape --channels studio \
+  --oldest-date 2024-01-01 --newest-date 2024-06-30 \
+  --exclude-bots --format markdown \
+  --output slack_knowledge_base --split-by month
+```
+
+This writes `slack_knowledge_base/2024/studio_2024-01.md` through `studio_2024-06.md` in one run — no per-month reruns needed. Threads stay grouped under the month of their parent message.
 
 ## How It Works
 

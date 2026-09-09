@@ -12,6 +12,7 @@ browser:
 
 scrape:
   channels: []
+  exclude_bots: false
   expand_threads: true
   scroll_pause: 1.5
   scroll_max_retries: 5
@@ -24,3 +25,4 @@ output:
   format: json
   output_dir: "."
   filename_template: "{channel}_{date}"
+  split_by: null  # null (single file) or "month"

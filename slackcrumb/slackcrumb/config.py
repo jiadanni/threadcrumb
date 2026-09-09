@@ -28,6 +28,8 @@ class ScrapeConfig:
     channels: list[str] = field(default_factory=list)
     search_query: str | None = None
     oldest_date: str | None = None
+    newest_date: str | None = None
+    exclude_bots: bool = False
     expand_threads: bool = True
     scroll_pause: float = 1.5  # seconds between scrolls
     scroll_max_retries: int = 5  # consecutive empty scrolls before stopping
@@ -43,6 +45,7 @@ class OutputConfig:
     format: str = "json"  # json or markdown
     output_dir: str = "."
     filename_template: str = "{channel}_{date}"
+    split_by: str | None = None  # None (single file) or "month"
 
 
 @dataclass

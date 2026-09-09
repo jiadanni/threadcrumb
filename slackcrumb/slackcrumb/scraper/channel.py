@@ -15,6 +15,7 @@ from ..checkpoint import Checkpoint
 from ..config import ScrapeConfig
 from ..exceptions import NavigationError
 from ..models import ChannelExport, Message, Thread
+from ..utils.dates import message_datetime
 from ..utils.progress import progress_bar
 from .parser import get_reply_count, parse_message_element
 from .thread import expand_thread
@@ -76,10 +77,13 @@ async def scrape_channel(
 
     await navigate_to_channel(page, workspace_url, channel_name, config.navigation_timeout)
 
-    # Parse oldest_date if provided
+    # Parse date bounds if provided
     oldest_dt = None
     if config.oldest_date:
         oldest_dt = dateparser.parse(config.oldest_date)
+    newest_dt = None
+    if config.newest_date:
+        newest_dt = dateparser.parse(config.newest_date)
 
     # Resume from checkpoint if available
     last_ts = checkpoint.get_last_timestamp(channel_name)
@@ -88,7 +92,9 @@ async def scrape_channel(
 
     # Scroll loop: collect all messages
     all_messages: dict[str, Message] = {}  # keyed by timestamp for dedup
+    skipped_ts: set[str] = set()  # filtered out, but still count as scroll progress
     empty_scroll_count = 0
+    reached_oldest = False
 
     logger.info("Starting scroll loop for #%s...", channel_name)
 
@@ -111,24 +117,38 @@ async def scrape_channel(
 
         for el in elements:
             msg = await parse_message_element(el)
-            if msg and msg.timestamp and msg.timestamp not in all_messages:
-                # Check oldest_date cutoff
-                if oldest_dt and msg.datetime_str:
-                    try:
-                        msg_dt = dateparser.parse(msg.datetime_str)
-                        if msg_dt and msg_dt < oldest_dt:
-                            logger.info("Reached oldest_date cutoff.")
-                            empty_scroll_count = config.scroll_max_retries  # force stop
-                            break
-                    except (ValueError, TypeError):
-                        pass
+            if not msg or not msg.timestamp:
+                continue
+            if msg.timestamp in all_messages or msg.timestamp in skipped_ts:
+                continue
 
-                # Skip if resuming and message is before checkpoint
-                if last_ts and msg.timestamp <= last_ts:
-                    continue
+            # Skip if resuming and message is before checkpoint
+            if last_ts and msg.timestamp <= last_ts:
+                continue
 
-                all_messages[msg.timestamp] = msg
-                new_count += 1
+            msg_dt = message_datetime(msg)
+
+            # Check oldest_date cutoff
+            if oldest_dt and msg_dt and msg_dt < oldest_dt:
+                logger.info("Reached oldest_date cutoff.")
+                reached_oldest = True
+                break
+
+            new_count += 1  # discovering a new message is progress, even if filtered
+
+            # Messages newer than newest_date: keep scrolling past them
+            if newest_dt and msg_dt and msg_dt.date() > newest_dt.date():
+                skipped_ts.add(msg.timestamp)
+                continue
+
+            if config.exclude_bots and msg.is_bot:
+                skipped_ts.add(msg.timestamp)
+                continue
+
+            all_messages[msg.timestamp] = msg
+
+        if reached_oldest:
+            break
 
         if new_count == 0:
             empty_scroll_count += 1
@@ -163,29 +183,37 @@ async def scrape_channel(
         # Re-query elements to expand threads
         elements = await page.query_selector_all(selectors.MESSAGE_ITEM)
         pbar = progress_bar(total=len(elements), desc=f"#{channel_name} threads", unit="thread")
+        thread_parent_ts: set[str] = set()
 
         for el in elements:
-            reply_count = await get_reply_count(el)
             msg = await parse_message_element(el)
 
-            if msg and reply_count > 0:
+            # Only expand messages that survived the scroll-loop filters
+            if not msg or msg.timestamp not in all_messages:
+                pbar.update(1)
+                continue
+
+            reply_count = await get_reply_count(el)
+            if reply_count > 0:
                 ts = msg.timestamp
+                thread_parent_ts.add(ts)
                 if checkpoint.is_thread_expanded(channel_name, ts):
                     pbar.update(1)
                     continue
 
                 replies = await expand_thread(page, el, config)
+                if config.exclude_bots:
+                    replies = [r for r in replies if not r.is_bot]
                 thread = Thread(parent=msg, replies=replies, reply_count=reply_count)
                 threads.append(thread)
 
                 checkpoint.mark_thread_expanded(channel_name, ts)
                 checkpoint.save()
-            elif msg:
-                standalone.append(msg)
 
             pbar.update(1)
 
         pbar.close()
+        standalone = [m for m in messages if m.timestamp not in thread_parent_ts]
     else:
         standalone = messages
 

@@ -54,3 +54,10 @@ credentials
 .env
 .env.local
 slack_tokens.json
+
+# Local scratch / notes
+/oauth/
+/fetch_slack_history_script
+/gem_description
+/run_fetch_script
+slackcrumb/debug_sidebar.py

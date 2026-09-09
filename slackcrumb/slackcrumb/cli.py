@@ -63,18 +63,24 @@ def login(ctx, workspace_url):
 @cli.command()
 @click.option("--channels", "-ch", multiple=True, help="Channel names to scrape.")
 @click.option("--search", "-s", "search_query", help="Search query instead of channel scrape.")
-@click.option("--oldest-date", help="Stop scrolling at this date (YYYY-MM-DD).")
+@click.option("--oldest-date", help="Stop scrolling at this date (YYYY-MM-DD, inclusive).")
+@click.option("--newest-date", help="Skip messages after this date (YYYY-MM-DD, inclusive).")
+@click.option("--exclude-bots/--include-bots", default=False,
+              help="Skip messages from Slack apps and bots.")
 @click.option("--format", "-f", "output_format", type=click.Choice(["json", "markdown"]),
               default="json", help="Output format.")
 @click.option("--output", "-o", "output_dir", default=".", help="Output directory.")
+@click.option("--split-by", type=click.Choice(["month"]), default=None,
+              help="Split output into one file per period under <output>/<year>/.")
 @click.option("--headless/--no-headless", default=True, help="Run browser headlessly.")
 @click.option("--resume", "resume_id", default=None, help="Resume a previous export by ID.")
 @click.option("--expand-threads/--no-expand-threads", default=True,
               help="Expand and scrape thread replies.")
 @click.option("--workspace-url", default=None, help="Override workspace URL from config.")
 @click.pass_context
-def scrape(ctx, channels, search_query, oldest_date, output_format, output_dir,
-           headless, resume_id, expand_threads, workspace_url):
+def scrape(ctx, channels, search_query, oldest_date, newest_date, exclude_bots,
+           output_format, output_dir, split_by, headless, resume_id, expand_threads,
+           workspace_url):
     """Scrape messages from Slack channels or search results."""
     config = ctx.obj["config"]
     logger = ctx.obj["logger"]
@@ -85,13 +91,31 @@ def scrape(ctx, channels, search_query, oldest_date, output_format, output_dir,
         click.echo(f"{Fore.RED}No workspace URL. Use --workspace-url or set it in config.{Style.RESET_ALL}", err=True)
         sys.exit(1)
 
+    from dateutil import parser as dateparser
+
+    bounds = {}
+    for label, value in (("--oldest-date", oldest_date), ("--newest-date", newest_date)):
+        if value:
+            try:
+                bounds[label] = dateparser.parse(value)
+            except (ValueError, OverflowError):
+                click.echo(f"{Fore.RED}Invalid date for {label}: {value}{Style.RESET_ALL}", err=True)
+                sys.exit(1)
+    if len(bounds) == 2 and bounds["--oldest-date"] > bounds["--newest-date"]:
+        click.echo(f"{Fore.RED}--oldest-date must not be after --newest-date.{Style.RESET_ALL}", err=True)
+        sys.exit(1)
+
     config.browser.headless = headless
     config.scrape.channels = list(channels)
     config.scrape.search_query = search_query
     config.scrape.oldest_date = oldest_date
+    config.scrape.newest_date = newest_date
+    config.scrape.exclude_bots = exclude_bots
     config.scrape.expand_threads = expand_threads
     config.output.format = output_format
     config.output.output_dir = output_dir
+    if split_by:
+        config.output.split_by = split_by
 
     if not channels and not search_query and not resume_id:
         click.echo(f"{Fore.RED}Specify --channels, --search, or --resume.{Style.RESET_ALL}", err=True)
@@ -148,6 +172,25 @@ def scrape(ctx, channels, search_query, oldest_date, output_format, output_dir,
             if config.scrape.search_query:
                 # Search mode
                 messages = await search_messages(page, config.scrape.search_query, config.scrape)
+
+                # Search results aren't scroll-bounded, so filter after the fact
+                from .utils.dates import message_datetime
+                oldest_dt = bounds.get("--oldest-date")
+                newest_dt = bounds.get("--newest-date")
+
+                def _keep(msg):
+                    if config.scrape.exclude_bots and msg.is_bot:
+                        return False
+                    msg_dt = message_datetime(msg)
+                    if msg_dt is None:
+                        return True
+                    if oldest_dt and msg_dt < oldest_dt:
+                        return False
+                    if newest_dt and msg_dt.date() > newest_dt.date():
+                        return False
+                    return True
+
+                messages = [m for m in messages if _keep(m)]
                 from .models import ChannelExport
                 channel_export = ChannelExport(
                     name=f"search_{config.scrape.search_query[:20]}",
@@ -174,12 +217,30 @@ def scrape(ctx, channels, search_query, oldest_date, output_format, output_dir,
                         logger.error("Channel %s failed: %s", ch_name, e)
 
             # Write output
-            if output_format == "markdown":
-                path = write_markdown(result, config.output)
-            else:
-                path = write_json(result, config.output)
+            writer = write_markdown if output_format == "markdown" else write_json
 
-            click.echo(f"\n{Fore.GREEN}Output written to: {path}{Style.RESET_ALL}")
+            if config.output.split_by == "month":
+                from dataclasses import replace as dc_replace
+                from .formatters.split import split_by_month
+
+                paths = []
+                for month, month_result in sorted(split_by_month(result).items()):
+                    year = month.split("-")[0]
+                    month_cfg = dc_replace(
+                        config.output,
+                        output_dir=str(Path(config.output.output_dir) / year),
+                    )
+                    paths.append(writer(month_result, month_cfg, date_str=month))
+
+                if not paths:
+                    click.echo(f"{Fore.YELLOW}No messages to write.{Style.RESET_ALL}")
+                else:
+                    click.echo(f"\n{Fore.GREEN}Output written to:{Style.RESET_ALL}")
+                    for path in paths:
+                        click.echo(f"  {path}")
+            else:
+                path = writer(result, config.output)
+                click.echo(f"\n{Fore.GREEN}Output written to: {path}{Style.RESET_ALL}")
 
         except SlackcrumbError as e:
             click.echo(f"{Fore.RED}Error: {e}{Style.RESET_ALL}", err=True)
